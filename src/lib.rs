@@ -7,12 +7,14 @@ extern crate panic_itm; // panic handler
 
 pub use cortex_m::{asm::bkpt, iprint, iprintln, peripheral::ITM};
 pub use cortex_m_rt::entry;
-pub use f3::hal::{prelude, serial::Serial, stm32f30x::usart1, time::MonoTimer};
+pub use f3::hal::{prelude, stm32f30x::usart1, time::MonoTimer};
 
 use core::fmt;
 
 use f3::hal::{
     prelude::*,
+
+    serial::{Rx, Serial, Tx},
     stm32f30x::{self, gpioc, GPIOE, RCC, USART1},
 };
 
@@ -33,81 +35,87 @@ macro_rules! uprintln {
     };
 }
 
-pub struct SerialPort {
-    usart1: &'static mut usart1::RegisterBlock,
+pub struct StSerial {
+    tx: Tx<USART1>,
+    rx: Rx<USART1>,
 }
 
-impl SerialPort {
-    pub fn wait_for_write(&mut self) {
-        while self.usart1.isr.read().txe().bit_is_clear() {}
-    }
-    pub fn write_byte(&mut self, byte: u8) {
-        self.wait_for_write();
-        self.usart1.tdr.write(|w| w.tdr().bits(u16::from(byte)))
-    }
-    pub fn wait_for_read(&mut self) {
-        while self.usart1.isr.read().rxne().bit_is_clear() {}
-    }
-    pub fn read_byte(&mut self) -> u8 {
-        self.wait_for_read();
-        self.usart1.rdr.read().rdr().bits() as u8
-    }
-}
-
-impl fmt::Write for SerialPort {
+impl fmt::Write for StSerial {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for byte in s.bytes() {
-            self.write_byte(byte);
+            let _ = self.tx.write(byte);
         }
         Ok(())
     }
 }
 
-
-pub fn init_serial() -> (SerialPort, MonoTimer, ITM) {
-    let cp = cortex_m::Peripherals::take().unwrap();
-    let dp = stm32f30x::Peripherals::take().unwrap();
-
-    let mut flash = dp.FLASH.constrain();
-    let mut rcc = dp.RCC.constrain();
-
-    let clocks = rcc.cfgr.freeze(&mut flash.acr);
-
-    let mut gpioc = dp.GPIOC.split(&mut rcc.ahb);
-
-    let tx = gpioc.pc4.into_af7(&mut gpioc.moder, &mut gpioc.afrl);
-    let rx = gpioc.pc5.into_af7(&mut gpioc.moder, &mut gpioc.afrl);
-
-    Serial::usart1(dp.USART1, (tx, rx), 115_200.bps(), clocks, &mut rcc.apb2);
-
-    unsafe {
-        (
-            SerialPort {
-                usart1: &mut *(USART1::ptr() as *mut _),
-            },
-            MonoTimer::new(cp.DWT, clocks),
-            cp.ITM,
-        )
+impl StSerial {
+    pub fn write(&mut self, byte: u8) {
+        self.tx.write(byte).unwrap();
+    }
+    pub fn read(&mut self) -> u8 {
+        loop {
+            match self.rx.read() {
+                Ok(byte) => return byte,
+                Err(nb::Error::WouldBlock) => continue,
+                Err(e) => panic!("{:#?}", e),
+            }
+        }
     }
 }
 
-pub fn init_onboard_leds() -> &'static gpioc::RegisterBlock {
-    // restrict access to the other peripherals
-    (stm32f30x::Peripherals::take().unwrap());
+pub struct System {
+    cp: cortex_m::Peripherals,
+    dp: stm32f30x::Peripherals,
+}
 
-    let (gpioe, rcc) = unsafe { (&*GPIOE::ptr(), &*RCC::ptr()) };
-    rcc.ahbenr.write(|w| w.iopeen().set_bit());
+impl System {
+    pub fn new() -> Self {
+        let cp = cortex_m::Peripherals::take().unwrap();
+        let dp = stm32f30x::Peripherals::take().unwrap();
+        Self { cp, dp }
+    }
 
-    gpioe.moder.write(|w| {
-        w.moder8().output();
-        w.moder9().output();
-        w.moder10().output();
-        w.moder11().output();
-        w.moder12().output();
-        w.moder13().output();
-        w.moder14().output();
-        w.moder15().output()
-    });
+    pub fn init_serial(self) -> StSerial {
+        let mut flash = self.dp.FLASH.constrain();
+        let mut rcc = self.dp.RCC.constrain();
 
-    gpioe
+        let clocks = rcc.cfgr.freeze(&mut flash.acr);
+
+        let mut gpioc = self.dp.GPIOC.split(&mut rcc.ahb);
+
+        let tx_pin = gpioc.pc4.into_af7(&mut gpioc.moder, &mut gpioc.afrl);
+        let rx_pin = gpioc.pc5.into_af7(&mut gpioc.moder, &mut gpioc.afrl);
+
+        let (tx, rx) = Serial::usart1(
+            self.dp.USART1,
+            (tx_pin, rx_pin),
+            115_200.bps(),
+            clocks,
+            &mut rcc.apb2,
+        )
+        .split();
+        StSerial { tx, rx }
+    }
+
+
+    pub fn init_onboard_leds(self) -> stm32f30x::GPIOE {
+        let rcc = self.dp.RCC;
+        let gpioe = self.dp.GPIOE;
+
+        rcc.ahbenr.write(|w| w.iopeen().set_bit());
+
+        gpioe.moder.write(|w| {
+            w.moder8().output();
+            w.moder9().output();
+            w.moder10().output();
+            w.moder11().output();
+            w.moder12().output();
+            w.moder13().output();
+            w.moder14().output();
+            w.moder15().output()
+        });
+
+        gpioe
+    }
 }
