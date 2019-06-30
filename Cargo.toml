@@ -1,0 +1,18 @@
+[package]
+authors = ["Stephen Weeks <tene@allalone.org>"]
+edition = "2018"
+name = "glow"
+version = "0.0.1"
+
+[dependencies]
+cortex-m = "0.5.6"
+cortex-m-rt = "0.6.8"
+panic-itm = "0.4.1"
+
+[dependencies.f3]
+features = ["rt"]
+version = "0.6.1"
+
+[dependencies.heapless]
+default-features = false
+version = "0.4.4"
