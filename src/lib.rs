@@ -1,5 +1,3 @@
-//! Initialization code
-
 #![no_std]
 
 #[allow(unused_extern_crates)] // NOTE(allow) bug rust-lang/rust53964
@@ -12,11 +10,16 @@ pub use f3::hal::{prelude, stm32f30x::usart1, time::MonoTimer};
 use core::fmt;
 
 use f3::hal::{
+    serial::{Serial, Tx, Rx},
+    gpio::{
+        gpioa::{self, PAx},
+        Output, PushPull,
+    },
     prelude::*,
-
-    serial::{Rx, Serial, Tx},
     stm32f30x::{self, gpioc, GPIOE, RCC, USART1},
 };
+
+use nb::block;
 
 #[macro_export]
 macro_rules! uprint {
@@ -54,13 +57,7 @@ impl StSerial {
         self.tx.write(byte).unwrap();
     }
     pub fn read(&mut self) -> u8 {
-        loop {
-            match self.rx.read() {
-                Ok(byte) => return byte,
-                Err(nb::Error::WouldBlock) => continue,
-                Err(e) => panic!("{:#?}", e),
-            }
-        }
+        block!(self.rx.read()).unwrap()
     }
 }
 
@@ -98,7 +95,6 @@ impl System {
         StSerial { tx, rx }
     }
 
-
     pub fn init_onboard_leds(self) -> stm32f30x::GPIOE {
         let rcc = self.dp.RCC;
         let gpioe = self.dp.GPIOE;
@@ -117,5 +113,31 @@ impl System {
         });
 
         gpioe
+    }
+
+    pub fn init_pwm(
+        self,
+    ) -> (
+        PAx<Output<PushPull>>,
+        PAx<Output<PushPull>>,
+        PAx<Output<PushPull>>,
+    ) {
+        let mut rcc = self.dp.RCC.constrain();
+        let mut gpioa = self.dp.GPIOA.split(&mut rcc.ahb);
+
+        let red = gpioa
+            .pa0
+            .into_push_pull_output(&mut gpioa.moder, &mut gpioa.otyper)
+            .downgrade();
+        let green = gpioa
+            .pa1
+            .into_push_pull_output(&mut gpioa.moder, &mut gpioa.otyper)
+            .downgrade();
+        let blue = gpioa
+            .pa2
+            .into_push_pull_output(&mut gpioa.moder, &mut gpioa.otyper)
+            .downgrade();
+
+        (red, green, blue)
     }
 }
