@@ -5,19 +5,30 @@ extern crate panic_itm; // panic handler
 
 pub use cortex_m::{asm::bkpt, iprint, iprintln, peripheral::ITM};
 pub use cortex_m_rt::entry;
-pub use f3::hal::{prelude, stm32f30x::usart1, time::MonoTimer};
+pub use f3::hal::{prelude, stm32f30x::usart1, stm32f30x::TIM2, time::MonoTimer};
 
 use core::fmt;
 
 use f3::hal::{
-    serial::{Serial, Tx, Rx},
     gpio::{
         gpioa::{self, PAx},
         Output, PushPull,
     },
     prelude::*,
+    serial::{Rx, Serial, Tx},
     stm32f30x::{self, gpioc, GPIOE, RCC, USART1},
 };
+/*
+use f3::hal::{
+    gpio::{
+        gpioa::{self, PAx},
+        Output, PushPull,
+    },
+    prelude::*,
+    serial::{Rx, Serial, Tx},
+    stm32f30x::{self, gpioc, GPIOE, RCC, USART1},
+};
+*/
 
 use nb::block;
 
@@ -115,29 +126,57 @@ impl System {
         gpioe
     }
 
-    pub fn init_pwm(
-        self,
-    ) -> (
-        PAx<Output<PushPull>>,
-        PAx<Output<PushPull>>,
-        PAx<Output<PushPull>>,
-    ) {
-        let mut rcc = self.dp.RCC.constrain();
-        let mut gpioa = self.dp.GPIOA.split(&mut rcc.ahb);
+    pub fn init_pwm(self) -> TIM2 {
+        let mut rcc = self.dp.RCC;
+        let mut gpioa = self.dp.GPIOA;
+        let mut tim2 = self.dp.TIM2;
 
-        let red = gpioa
-            .pa0
-            .into_push_pull_output(&mut gpioa.moder, &mut gpioa.otyper)
-            .downgrade();
-        let green = gpioa
-            .pa1
-            .into_push_pull_output(&mut gpioa.moder, &mut gpioa.otyper)
-            .downgrade();
-        let blue = gpioa
-            .pa2
-            .into_push_pull_output(&mut gpioa.moder, &mut gpioa.otyper)
-            .downgrade();
+        // Turn on GPIOA
+        rcc.ahbenr.modify(|_r, w| w.iopaen().set_bit());
 
-        (red, green, blue)
+        // Set pins to AF1 (TIM2_CH_2-4)
+        gpioa.moder.modify(|_r, w| {
+            w.moder1().alternate();
+            w.moder2().alternate();
+            w.moder3().alternate()
+        });
+
+        gpioa.afrl.modify(|_r, w| unsafe {
+            w.afrl1().bits(1);
+            w.afrl2().bits(1);
+            w.afrl3().bits(1)
+        });
+
+        // Power on TIM2
+        rcc.apb1enr.modify(|_r, w| w.tim2en().set_bit());
+
+        // Configure TIM2 channels 2-4 for PWM mode 1
+        tim2.ccmr1_output
+            .modify(|_r, w| unsafe { w.oc2m().bits(0b110).oc2pe().set_bit() });
+        tim2.ccmr2_output.modify(|_r, w| unsafe {
+            w.oc3m().bits(0b110).oc4m().bits(0b110);
+            w.oc3pe().set_bit().oc4pe().set_bit()
+        });
+        tim2.ccer.modify(|_r, w| {
+            w.cc2e().set_bit();
+            w.cc3e().set_bit();
+            w.cc4e().set_bit()
+        });
+        //tim2.cr1.modify(|_r, w| w.arpe().set_bit());
+
+        // Configure TIM2 to run at 1kHz
+        tim2.arr.write(|w| unsafe { w.arrl().bits(256) });
+        tim2.psc.write(|w| unsafe { w.psc().bits(7999) });
+
+        // Set starting color
+        tim2.ccr2.write(|w| unsafe { w.bits(178) });
+        tim2.ccr3.write(|w| unsafe { w.bits(102) });
+        tim2.ccr4.write(|w| unsafe { w.bits(255) });
+
+        // Start timer
+        tim2.cr1.modify(|_r, w| w.cen().set_bit());
+        tim2.egr.write(|w| w.ug().set_bit());
+
+        tim2
     }
 }

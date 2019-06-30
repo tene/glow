@@ -12,14 +12,8 @@ use stm32f30x_hal::prelude::_embedded_hal_digital_OutputPin;
 #[entry]
 fn main() -> ! {
     let system = System::new();
-    let (mut red, mut green, mut blue) = system.init_pwm();
+    let mut tim2 = system.init_pwm();
 
     loop {
-        red.set_high();
-        green.set_high();
-        blue.set_high();
-        red.set_low();
-        green.set_low();
-        blue.set_low();
     }
 }
