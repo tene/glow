@@ -1,0 +1,27 @@
+[package]
+authors = ["Stephen Weeks <tene@allalone.org>"]
+edition = "2018"
+name = "glow-rtfm"
+readme = "README.md"
+version = "0.1.0"
+
+[[bin]]
+bench = false
+name = "glow-rtfm"
+test = false
+
+[dependencies]
+cortex-m = "0.6.0"
+cortex-m-rt = "0.6.8"
+cortex-m-rtfm ={version = "0.4.3", features = ["timer-queue"]}
+panic-itm = "0.4.1"
+
+[dependencies.stm32f1]
+features = ["stm32f103", "rt"]
+version = "0.7.1"
+
+[profile]
+[profile.release]
+codegen-units = 1
+debug = true
+lto = true
