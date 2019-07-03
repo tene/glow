@@ -21,6 +21,8 @@ use stm32f1xx_hal::{
     timer::{Event, Timer},
 };
 
+use glow::knob::{Direction, Knob};
+
 const PERIOD: u32 = 8_000_000;
 
 #[app(device = stm32f1::stm32f103)]
@@ -29,6 +31,7 @@ const APP: () = {
     static mut toggle: bool = false;
     static mut led: PC13<Output<PushPull>> = ();
     static mut button: PB12<Input<PullDown>> = ();
+    static mut knob: Knob<PB13<Input<PullDown>>, PB14<Input<PullDown>>> = ();
 
     //#[init(schedule = [foo])]
     #[init]
@@ -64,22 +67,36 @@ const APP: () = {
 
         let led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
         let button = gpiob.pb12.into_pull_down_input(&mut gpiob.crh);
+        let ka = gpiob.pb13.into_pull_down_input(&mut gpiob.crh);
+        let kb = gpiob.pb14.into_pull_down_input(&mut gpiob.crh);
+        let knob = Knob::new(ka, kb);
 
         //schedule.foo(Instant::now() + PERIOD.cycles()).unwrap();
         let itm = core.ITM;
-        init::LateResources { itm, led, button }
+        init::LateResources {
+            itm,
+            led,
+            button,
+            knob,
+        }
     }
 
-    #[interrupt(resources = [itm, toggle, led, button])]
+    #[interrupt(resources = [itm, toggle, led, button, knob])]
     fn EXTI15_10() {
-        loop {
-            if resources.button.is_high() {
-                *resources.toggle = true;
-                resources.led.set_high();
-            } else {
-                *resources.toggle = false;
-                resources.led.set_low();
-            }
+        /*
+        if resources.button.is_high() {
+            *resources.toggle = true;
+            resources.led.set_high();
+        } else {
+            *resources.toggle = false;
+            resources.led.set_low();
+        }
+        */
+        use Direction::*;
+        match resources.knob.poll() {
+            Some(CW) => resources.led.set_high(),
+            Some(CCW) => resources.led.set_low(),
+            None => {}
         }
     }
 
