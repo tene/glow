@@ -1,4 +1,4 @@
-#![deny(unsafe_code)]
+//#![deny(unsafe_code)]
 //#![deny(warnings)]
 #![no_main]
 #![no_std]
@@ -11,7 +11,11 @@ use rtfm::{app, Instant};
 use stm32f1::stm32f103::Interrupt;
 use stm32f1xx_hal::{
     self as hal,
-    gpio::{gpiob::{PB12, PB13, PB14}, gpioc::PC13, Input, Output, PullDown, PushPull},
+    gpio::{
+        gpiob::{PB12, PB13, PB14},
+        gpioc::PC13,
+        Input, Output, PullDown, PushPull,
+    },
     prelude::*,
     serial::{Rx, Serial, Tx},
     timer::{Event, Timer},
@@ -30,6 +34,29 @@ const APP: () = {
     #[init]
     fn init() -> init::LateResources {
         let rcc = device.RCC;
+        let afio = device.AFIO;
+        let exti = device.EXTI;
+
+        rcc.apb2enr.modify(|_r, w| w.afioen().set_bit());
+        afio.exticr4.modify(|_r, w| unsafe {
+            w.exti12()
+                .bits(0b001)
+                .exti13()
+                .bits(0b001)
+                .exti14()
+                .bits(0b001)
+        });
+
+        // Enable EXT Interrupts 12-14
+        exti.imr
+            .modify(|_r, w| w.mr12().set_bit().mr13().set_bit().mr14().set_bit());
+
+        // Enable rising trigger for 12-14
+        exti.rtsr
+            .modify(|_r, w| w.tr12().set_bit().tr13().set_bit().tr14().set_bit());
+        // Enable falling trigger for 12-14
+        exti.ftsr
+            .modify(|_r, w| w.tr12().set_bit().tr13().set_bit().tr14().set_bit());
 
         let mut rcc = rcc.constrain();
         let mut gpiob = device.GPIOB.split(&mut rcc.apb2);
@@ -43,8 +70,8 @@ const APP: () = {
         init::LateResources { itm, led, button }
     }
 
-    #[idle(resources = [itm, toggle, led, button])]
-    fn idle() -> ! {
+    #[interrupt(resources = [itm, toggle, led, button])]
+    fn EXTI15_10() {
         loop {
             if resources.button.is_high() {
                 *resources.toggle = true;
@@ -55,25 +82,6 @@ const APP: () = {
             }
         }
     }
-
-/*
-    #[task(resources = [itm, toggle, led], schedule = [foo])]
-    fn foo() {
-        let now = Instant::now();
-        iprintln!(&mut resources.itm.stim[0], "Tick {:?} {:?}", scheduled, now);
-        schedule.foo(scheduled + PERIOD.cycles()).unwrap();
-        match resources.toggle {
-            true => {
-                resources.led.set_low();
-                *resources.toggle = false;
-            }
-            false => {
-                resources.led.set_high();
-                *resources.toggle = true;
-            }
-        }
-    }
-    */
 
     extern "C" {
         fn EXTI0();
