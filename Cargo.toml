@@ -20,6 +20,10 @@ panic-itm = "0.4.1"
 features = ["stm32f103", "rt"]
 version = "0.7.1"
 
+[dependencies.stm32f1xx-hal]
+features = ["stm32f103", "rt"]
+version = "0.3.0"
+
 [profile]
 [profile.release]
 codegen-units = 1
