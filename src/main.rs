@@ -4,20 +4,31 @@
 #![no_std]
 
 #[allow(unused_extern_crates)] // NOTE(allow) bug rust-lang/rust53964
-extern crate panic_itm; // panic handler
+extern crate panic_semihosting; // panic handler
 
-use rtfm::{app, Instant};
+use rtfm::app;
 use stm32f1xx_hal::{
     gpio::{
         gpioa::{PA5, PA6, PA7},
         gpiob::{PB12, PB13, PB14},
         gpioc::PC13,
-        Alternate, Floating, Input, Output, PullDown, PushPull,
+        Alternate, Floating, Input, Output, PullDown, PushPull, GpioExt,
     },
-    prelude::*,
+    afio::AfioExt,
+    rcc::RccExt,
+    flash::FlashExt,
+    time::U32Ext,
     spi::Spi,
     stm32::SPI1,
 };
+use embedded_hal::digital::v2::OutputPin;
+/*
++    prelude::{
++        _embedded_hal_Pwm, _embedded_hal_PwmPin, _stm32_hal_afio_AfioExt,
++        _stm32_hal_flash_FlashExt, _stm32_hal_gpio_GpioExt, _stm32_hal_rcc_RccExt,
++        _stm32_hal_time_U32Ext,
++    }
+*/
 
 #[allow(unused)] // NOTE(allow) bug rust-lang/rust53964
 use apa102_spi::Apa102;
@@ -25,8 +36,6 @@ use smart_leds::{SmartLedsWrite, RGB8};
 use ws2812_spi::Ws2812;
 
 use glow::knob::{Direction, Knob};
-
-const PERIOD: u32 = 8_000_000;
 
 #[app(device = stm32f1::stm32f103)]
 const APP: () = {
@@ -123,18 +132,17 @@ const APP: () = {
 
     #[interrupt(resources = [led, button, knob, led_strip])]
     fn EXTI15_10() {
-        let red: RGB8 = (255, 0, 0).into();
         let all_red: [RGB8; 8] = [(255u8, 128u8, 128u8).into(); 8];
         let all_blue: [RGB8; 8] = [(128u8, 128u8, 255u8).into(); 8];
         use Direction::*;
         match resources.knob.poll() {
             Some(CW) => {
-                resources.led_strip.write(all_red.iter().cloned());
-                resources.led.set_high();
+                let _ = resources.led_strip.write(all_red.iter().cloned());
+                let _ = resources.led.set_high();
             }
             Some(CCW) => {
-                resources.led_strip.write(all_blue.iter().cloned());
-                resources.led.set_low();
+                let _ = resources.led_strip.write(all_blue.iter().cloned());
+                let _ = resources.led.set_low();
             }
             None => {}
         }

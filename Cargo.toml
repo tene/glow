@@ -13,7 +13,7 @@ test = false
 [dependencies]
 cortex-m = "0.6.0"
 cortex-m-rt = "0.6.8"
-panic-itm = "0.4.1"
+panic-semihosting = "0.5.2"
 embedded-hal = "0.2.3"
 ws2812-spi = "0.2.0"
 ws2812-timer-delay = "0.2.0"

@@ -1,5 +1,4 @@
-#![no_std]
-use embedded_hal::digital::v1::InputPin;
+use embedded_hal::digital::v2::InputPin;
 
 pub enum Direction {
     CW,
@@ -18,7 +17,10 @@ impl<A: InputPin, B: InputPin> Knob<A, B> {
         Self { a, b, last }
     }
     pub fn poll(&mut self) -> Option<Direction> {
-        let next: (bool, bool) = (self.a.is_high(), self.b.is_high());
+        let next: (bool, bool) = (
+            self.a.is_high().unwrap_or(false),
+            self.b.is_high().unwrap_or(false),
+        );
         let last = self.last;
         self.last = next;
         use Direction::*;
