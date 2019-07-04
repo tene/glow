@@ -6,22 +6,23 @@
 #[allow(unused_extern_crates)] // NOTE(allow) bug rust-lang/rust53964
 extern crate panic_semihosting; // panic handler
 
+use embedded_hal::digital::v2::OutputPin;
 use rtfm::app;
 use stm32f1xx_hal::{
+    afio::AfioExt,
+    flash::FlashExt,
     gpio::{
         gpioa::{PA5, PA6, PA7},
         gpiob::{PB12, PB13, PB14},
         gpioc::PC13,
-        Alternate, Floating, Input, Output, PullDown, PushPull, GpioExt,
+        Alternate, Floating, GpioExt, Input, Output, PullDown, PushPull,
     },
-    afio::AfioExt,
+    pwm::PwmExt,
     rcc::RccExt,
-    flash::FlashExt,
-    time::U32Ext,
     spi::Spi,
     stm32::SPI1,
+    time::U32Ext,
 };
-use embedded_hal::digital::v2::OutputPin;
 /*
 +    prelude::{
 +        _embedded_hal_Pwm, _embedded_hal_PwmPin, _stm32_hal_afio_AfioExt,
@@ -36,6 +37,7 @@ use smart_leds::{SmartLedsWrite, RGB8};
 use ws2812_spi::Ws2812;
 
 use glow::knob::{Direction, Knob};
+use glow::pwmled::PwmLed;
 
 #[app(device = stm32f1::stm32f103)]
 const APP: () = {
@@ -54,6 +56,7 @@ const APP: () = {
             ),
         >,
     > = ();
+    static mut pwm_led: PwmLed = ();
 
     //#[init(schedule = [foo])]
     #[init]
@@ -61,6 +64,7 @@ const APP: () = {
         let rcc = device.RCC;
         let afio = device.AFIO;
         let exti = device.EXTI;
+        let tim4 = device.TIM4;
 
         rcc.apb2enr
             .modify(|_r, w| w.afioen().enabled().spi1en().enabled());
@@ -121,8 +125,29 @@ const APP: () = {
         //let led_strip = Apa102::new(spi);
         let led_strip = Ws2812::new(spi);
 
+        //let c1 = gpioa.pa0.into_alternate_push_pull(&mut gpioa.crl);
+        //let c2 = gpioa.pa1.into_alternate_push_pull(&mut gpioa.crl);
+        //let c3 = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
+        //let c4 = gpioa.pa3.into_alternate_push_pull(&mut gpioa.crl);
+
+        let c1 = gpiob.pb6.into_alternate_push_pull(&mut gpiob.crl);
+        let c2 = gpiob.pb7.into_alternate_push_pull(&mut gpiob.crl);
+        let c3 = gpiob.pb8.into_alternate_push_pull(&mut gpiob.crh);
+        let c4 = gpiob.pb9.into_alternate_push_pull(&mut gpiob.crh);
+
+        let (r, g, _, b) = tim4.pwm(
+            (c1, c2, c3, c4),
+            &mut afio.mapr,
+            1.khz(),
+            clocks,
+            &mut rcc.apb1,
+        );
+
+        let pwm_led = PwmLed::new(r, g, b);
+
         //schedule.foo(Instant::now() + PERIOD.cycles()).unwrap();
         init::LateResources {
+            pwm_led,
             led,
             button,
             knob,
@@ -130,17 +155,19 @@ const APP: () = {
         }
     }
 
-    #[interrupt(resources = [led, button, knob, led_strip])]
+    #[interrupt(resources = [led, button, knob, led_strip, pwm_led])]
     fn EXTI15_10() {
         let all_red: [RGB8; 8] = [(255u8, 128u8, 128u8).into(); 8];
         let all_blue: [RGB8; 8] = [(128u8, 128u8, 255u8).into(); 8];
         use Direction::*;
         match resources.knob.poll() {
             Some(CW) => {
+                resources.pwm_led.rgb8(255, 128, 128);
                 let _ = resources.led_strip.write(all_red.iter().cloned());
                 let _ = resources.led.set_high();
             }
             Some(CCW) => {
+                resources.pwm_led.rgb8(128, 128, 255);
                 let _ = resources.led_strip.write(all_blue.iter().cloned());
                 let _ = resources.led.set_low();
             }
