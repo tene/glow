@@ -23,15 +23,8 @@ use stm32f1xx_hal::{
     stm32::SPI1,
     time::U32Ext,
 };
-/*
-+    prelude::{
-+        _embedded_hal_Pwm, _embedded_hal_PwmPin, _stm32_hal_afio_AfioExt,
-+        _stm32_hal_flash_FlashExt, _stm32_hal_gpio_GpioExt, _stm32_hal_rcc_RccExt,
-+        _stm32_hal_time_U32Ext,
-+    }
-*/
 
-#[allow(unused)] // NOTE(allow) bug rust-lang/rust53964
+#[allow(unused)]
 use apa102_spi::Apa102;
 use smart_leds::{SmartLedsWrite, RGB8};
 use ws2812_spi::Ws2812;
@@ -124,11 +117,6 @@ const APP: () = {
         );
         //let led_strip = Apa102::new(spi);
         let led_strip = Ws2812::new(spi);
-
-        //let c1 = gpioa.pa0.into_alternate_push_pull(&mut gpioa.crl);
-        //let c2 = gpioa.pa1.into_alternate_push_pull(&mut gpioa.crl);
-        //let c3 = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
-        //let c4 = gpioa.pa3.into_alternate_push_pull(&mut gpioa.crl);
 
         let c1 = gpiob.pb6.into_alternate_push_pull(&mut gpiob.crl);
         let c2 = gpiob.pb7.into_alternate_push_pull(&mut gpiob.crl);

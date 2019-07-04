@@ -32,6 +32,15 @@ version = "0.7.1"
 features = ["stm32f103", "rt"]
 version = "0.3.0"
 
+[dependencies.palette]
+version = "0.4.1"
+default-features = false
+
+[patch.crates-io]
+num-traits = { path = "../num-traits", default-features = false }
+approx = { path = "../approx", default-features = false }
+palette = { path = "../palette/palette", default-features = false }
+
 [profile]
 [profile.release]
 codegen-units = 1
