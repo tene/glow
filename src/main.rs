@@ -6,11 +6,8 @@
 #[allow(unused_extern_crates)] // NOTE(allow) bug rust-lang/rust53964
 extern crate panic_itm; // panic handler
 
-use cortex_m::iprintln;
 use rtfm::{app, Instant};
-use stm32f1::stm32f103::Interrupt;
 use stm32f1xx_hal::{
-    self as hal,
     gpio::{
         gpioa::{PA5, PA6, PA7},
         gpiob::{PB12, PB13, PB14},
@@ -33,7 +30,6 @@ const PERIOD: u32 = 8_000_000;
 
 #[app(device = stm32f1::stm32f103)]
 const APP: () = {
-    static mut itm: cortex_m::peripheral::ITM = ();
     static mut toggle: bool = false;
     static mut led: PC13<Output<PushPull>> = ();
     static mut button: PB12<Input<PullDown>> = ();
@@ -117,9 +113,7 @@ const APP: () = {
         let led_strip = Ws2812::new(spi);
 
         //schedule.foo(Instant::now() + PERIOD.cycles()).unwrap();
-        let itm = core.ITM;
         init::LateResources {
-            itm,
             led,
             button,
             knob,
