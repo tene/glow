@@ -25,4 +25,10 @@ impl PwmLed {
         self.g.set_duty(i * (g as u16));
         self.b.set_duty(i * (b as u16));
     }
+    pub fn rgb_f32(&mut self, r: f32, g: f32, b: f32) {
+        let max = self.max as f32;
+        self.r.set_duty((max * r) as u16);
+        self.g.set_duty((max * g) as u16);
+        self.b.set_duty((max * b) as u16);
+    }
 }

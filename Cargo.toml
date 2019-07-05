@@ -45,4 +45,5 @@ palette = { path = "../palette/palette", default-features = false }
 [profile.release]
 codegen-units = 1
 debug = true
-lto = true
+# GDB segfaults when loading this
+#lto = true

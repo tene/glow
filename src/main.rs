@@ -26,8 +26,11 @@ use stm32f1xx_hal::{
 
 #[allow(unused)]
 use apa102_spi::Apa102;
+#[allow(unused)]
 use smart_leds::{SmartLedsWrite, RGB8};
 use ws2812_spi::Ws2812;
+
+use palette::{Lch, Srgb, LinSrgb, Hue};
 
 use glow::knob::{Direction, Knob};
 use glow::pwmled::PwmLed;
@@ -50,6 +53,7 @@ const APP: () = {
         >,
     > = ();
     static mut pwm_led: PwmLed = ();
+    static mut color: Lch = ();
 
     //#[init(schedule = [foo])]
     #[init]
@@ -133,6 +137,8 @@ const APP: () = {
 
         let pwm_led = PwmLed::new(r, g, b);
 
+        let color: Lch = Srgb::new(1.0,0.1,0.1).into();
+
         //schedule.foo(Instant::now() + PERIOD.cycles()).unwrap();
         init::LateResources {
             pwm_led,
@@ -140,27 +146,31 @@ const APP: () = {
             button,
             knob,
             led_strip,
+            color,
         }
     }
 
-    #[interrupt(resources = [led, button, knob, led_strip, pwm_led])]
+    #[interrupt(resources = [led, button, knob, led_strip, pwm_led, color])]
     fn EXTI15_10() {
-        let all_red: [RGB8; 8] = [(255u8, 128u8, 128u8).into(); 8];
-        let all_blue: [RGB8; 8] = [(128u8, 128u8, 255u8).into(); 8];
+        //let all_red: [RGB8; 8] = [(255u8, 128u8, 128u8).into(); 8];
+        //let all_blue: [RGB8; 8] = [(128u8, 128u8, 255u8).into(); 8];
         use Direction::*;
         match resources.knob.poll() {
             Some(CW) => {
-                resources.pwm_led.rgb8(255, 128, 128);
-                let _ = resources.led_strip.write(all_red.iter().cloned());
+                //let _ = resources.led_strip.write(all_red.iter().cloned());
                 let _ = resources.led.set_high();
+                *resources.color = resources.color.shift_hue(10.0);
             }
             Some(CCW) => {
-                resources.pwm_led.rgb8(128, 128, 255);
-                let _ = resources.led_strip.write(all_blue.iter().cloned());
+                //let _ = resources.led_strip.write(all_blue.iter().cloned());
                 let _ = resources.led.set_low();
+                *resources.color = resources.color.shift_hue(-10.0);
             }
             None => {}
         }
+        let rgb: LinSrgb = LinSrgb::from(*resources.color);
+        let (r,g,b) = rgb.into_components();
+        resources.pwm_led.rgb_f32(r,g,b);
     }
 
     extern "C" {
