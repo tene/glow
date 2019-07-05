@@ -56,6 +56,7 @@ const APP: () = {
     > = ();
     static mut pwm_led: PwmLed = ();
     static mut color: Lch = ();
+    static mut speed: f32 = 1.0;
 
     #[init(schedule = [tick])]
     fn init() -> init::LateResources {
@@ -151,7 +152,7 @@ const APP: () = {
         }
     }
 
-    #[interrupt(resources = [led, button, knob, led_strip, pwm_led, color])]
+    #[interrupt(resources = [led, button, knob, speed])]
     fn EXTI15_10() {
         //let all_red: [RGB8; 8] = [(255u8, 128u8, 128u8).into(); 8];
         //let all_blue: [RGB8; 8] = [(128u8, 128u8, 255u8).into(); 8];
@@ -160,24 +161,21 @@ const APP: () = {
             Some(CW) => {
                 //let _ = resources.led_strip.write(all_red.iter().cloned());
                 let _ = resources.led.set_high();
-                *resources.color = resources.color.shift_hue(10.0);
+                *resources.speed += 0.2;
             }
             Some(CCW) => {
                 //let _ = resources.led_strip.write(all_blue.iter().cloned());
                 let _ = resources.led.set_low();
-                *resources.color = resources.color.shift_hue(-10.0);
+                *resources.speed -= 0.2;
             }
             None => {}
         }
-        let rgb: LinSrgb = LinSrgb::from(*resources.color);
-        let (r,g,b) = rgb.into_components();
-        resources.pwm_led.rgb_f32(r,g,b);
     }
 
-    #[task(resources = [color, pwm_led], schedule = [tick])]
+    #[task(resources = [color, pwm_led, speed], schedule = [tick])]
     fn tick() {
         schedule.tick(Instant::now() + PERIOD.cycles()).unwrap();
-        *resources.color = resources.color.shift_hue(1.0);
+        *resources.color = resources.color.shift_hue(*resources.speed);
         let rgb: LinSrgb = LinSrgb::from(*resources.color);
         let (r,g,b) = rgb.into_components();
         resources.pwm_led.rgb_f32(r,g,b);
