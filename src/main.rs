@@ -7,7 +7,7 @@
 extern crate panic_semihosting; // panic handler
 
 use embedded_hal::digital::v2::OutputPin;
-use rtfm::app;
+use rtfm::{app,Instant};
 use stm32f1xx_hal::{
     afio::AfioExt,
     flash::FlashExt,
@@ -35,6 +35,8 @@ use palette::{Lch, Srgb, LinSrgb, Hue};
 use glow::knob::{Direction, Knob};
 use glow::pwmled::PwmLed;
 
+const PERIOD: u32 = 80_000;
+
 #[app(device = stm32f1::stm32f103)]
 const APP: () = {
     static mut toggle: bool = false;
@@ -55,8 +57,7 @@ const APP: () = {
     static mut pwm_led: PwmLed = ();
     static mut color: Lch = ();
 
-    //#[init(schedule = [foo])]
-    #[init]
+    #[init(schedule = [tick])]
     fn init() -> init::LateResources {
         let rcc = device.RCC;
         let afio = device.AFIO;
@@ -139,7 +140,7 @@ const APP: () = {
 
         let color: Lch = Srgb::new(1.0,0.1,0.1).into();
 
-        //schedule.foo(Instant::now() + PERIOD.cycles()).unwrap();
+        schedule.tick(Instant::now() + PERIOD.cycles()).unwrap();
         init::LateResources {
             pwm_led,
             led,
@@ -172,6 +173,15 @@ const APP: () = {
         let (r,g,b) = rgb.into_components();
         resources.pwm_led.rgb_f32(r,g,b);
     }
+
+    #[task(resources = [color, pwm_led], schedule = [tick])]
+    fn tick() {
+        schedule.tick(Instant::now() + PERIOD.cycles()).unwrap();
+        *resources.color = resources.color.shift_hue(1.0);
+        let rgb: LinSrgb = LinSrgb::from(*resources.color);
+        let (r,g,b) = rgb.into_components();
+        resources.pwm_led.rgb_f32(r,g,b);
+}
 
     extern "C" {
         fn EXTI0();
