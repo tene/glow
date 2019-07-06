@@ -5,17 +5,20 @@ name = "glow"
 readme = "README.md"
 version = "0.1.0"
 
-[[bin]]
-bench = false
-name = "glow"
-test = false
-
 [dependencies]
 cortex-m = "0.6.0"
 cortex-m-rt = "0.6.8"
-cortex-m-rtfm ={version = "0.4.3", features = ["timer-queue"]}
 panic-itm = "0.4.1"
+panic-halt = "0.2.0"
 embedded-hal = "0.2.3"
+ws2812-spi = "0.2.0"
+ws2812-timer-delay = "0.2.0"
+apa102-spi = "0.2.0"
+smart-leds = "0.2.0"
+
+[dependencies.cortex-m-rtfm]
+features = ["timer-queue"]
+version = "0.4.3"
 
 [dependencies.stm32f1]
 features = ["stm32f103", "rt"]
