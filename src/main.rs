@@ -72,8 +72,8 @@ const APP: () = {
         >,
     > = ();
     static mut pwm_led: PwmLed = ();
-    static mut speed: f32 = -0.65;
-    static mut step: f32 = 1.0;
+    static mut speed: f32 = -1.5;
+    static mut step: f32 = 16.0;
     static mut hue: f32 = 0.0;
 
     #[init(schedule = [tick])]
@@ -111,7 +111,7 @@ const APP: () = {
         let clocks = rcc
             .cfgr
             .use_hse(8.mhz())
-            .sysclk(16.mhz())
+            .sysclk(24.mhz())
             .freeze(&mut flash.acr);
         let mut afio = afio.constrain(&mut rcc.apb2);
         let mut gpioa = device.GPIOA.split(&mut rcc.apb2);
@@ -136,13 +136,11 @@ const APP: () = {
             spi_pins,
             &mut afio.mapr,
             apa102_spi::MODE,
-            //ws2812_spi::MODE,
-            1_000_000.hz(),
+            24_000_000.hz(),
             clocks,
             &mut rcc.apb2,
         );
         let led_strip = Apa102::new(spi);
-        //let led_strip = Ws2812::new(spi);
 
         let pb10 = gpiob.pb10.into_alternate_open_drain(&mut gpiob.crh);
         let pb11 = gpiob.pb11.into_alternate_open_drain(&mut gpiob.crh);
@@ -262,8 +260,8 @@ const APP: () = {
         *resources.hue = hue;
         let start = Hsv {
             hue: hue as u8,
-            sat: 0x99,
-            val: 0x55,
+            sat: 0xff,
+            val: 0xff,
         };
         let inc = *resources.step as u8;
         let colors = successors(Some(start), |c| {
@@ -276,8 +274,8 @@ const APP: () = {
         .take(72);
         let block: Vec<RGB8, consts::U72> = colors.collect();
         let center = once(block[0]).cycle().take(2);
-        let petals = once(block[1]).chain(once(block[2])).cycle().take(12);
-        let rays = once(block[3]).chain(once(block[4])).cycle().take(12);
+        let petals = once(block[1]).chain(once(block[3])).cycle().take(12);
+        let rays = once(block[2]).chain(once(block[4])).cycle().take(12);
         let outer = once(block[5]).chain(once(block[6])).cycle().take(12);
         let full = center.chain(petals).chain(rays).chain(outer);
         //let full_block: Vec<RGB8, consts::U38> = full.collect();
