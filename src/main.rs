@@ -6,31 +6,44 @@
 #[allow(unused_extern_crates)] // NOTE(allow) bug rust-lang/rust53964
 extern crate panic_semihosting; // panic handler
 
-use core::iter::successors;
+#[allow(unused)]
+use cortex_m_semihosting::hprintln;
+
+use core::{
+    fmt::Write,
+    iter::{once, successors},
+};
 
 use embedded_hal::digital::v2::OutputPin;
-use rtfm::{app,Instant};
+use rtfm::{app, Instant};
 use stm32f1xx_hal::{
     afio::AfioExt,
     flash::FlashExt,
     gpio::{
         gpioa::{PA5, PA6, PA7},
-        gpiob::{PB12, PB13, PB14, PB15},
+        gpiob::{PB10, PB11, PB12, PB13, PB14, PB15},
         gpioc::PC13,
-        Alternate, Floating, GpioExt, Input, Output, PullDown, PushPull,
+        Alternate, Floating, GpioExt, Input, OpenDrain, Output, PullDown, PushPull,
     },
+    i2c::{BlockingI2c, DutyCycle, Mode},
     pwm::PwmExt,
     rcc::RccExt,
     spi::Spi,
-    stm32::SPI1,
+    stm32::{I2C2, SPI1},
     time::U32Ext,
 };
 
 use apa102_spi::Apa102;
 #[allow(unused)]
-use smart_leds::{SmartLedsWrite, RGB8, hsv::{Hsv, hsv2rgb}};
-#[allow(unused)]
-use ws2812_spi::Ws2812;
+use smart_leds::{
+    hsv::{hsv2rgb, Hsv},
+    SmartLedsWrite, RGB8,
+};
+
+use embedded_graphics::{fonts::Font6x8, prelude::*};
+use ssd1306::{interface::I2cInterface, prelude::*, Builder};
+
+use heapless::{consts, String, Vec};
 
 use glow::knob::{Direction, Knob};
 use glow::pwmled::PwmLed;
@@ -44,8 +57,11 @@ const APP: () = {
     //static mut button: PB12<Input<PullDown>> = ();
     static mut knob: Knob<PB12<Input<PullDown>>, PB13<Input<PullDown>>> = ();
     static mut knob2: Knob<PB14<Input<PullDown>>, PB15<Input<PullDown>>> = ();
+    static mut screen: GraphicsMode<
+        I2cInterface<BlockingI2c<I2C2, (PB10<Alternate<OpenDrain>>, PB11<Alternate<OpenDrain>>)>>,
+    > = ();
     static mut led_strip: Apa102<
-    //static mut led_strip: Ws2812<
+        //static mut led_strip: Ws2812<
         Spi<
             SPI1,
             (
@@ -56,8 +72,8 @@ const APP: () = {
         >,
     > = ();
     static mut pwm_led: PwmLed = ();
-    static mut speed: f32 = 0.0;
-    static mut step: u8 = 1;
+    static mut speed: f32 = -0.65;
+    static mut step: f32 = 1.0;
     static mut hue: f32 = 0.0;
 
     #[init(schedule = [tick])]
@@ -128,6 +144,31 @@ const APP: () = {
         let led_strip = Apa102::new(spi);
         //let led_strip = Ws2812::new(spi);
 
+        let pb10 = gpiob.pb10.into_alternate_open_drain(&mut gpiob.crh);
+        let pb11 = gpiob.pb11.into_alternate_open_drain(&mut gpiob.crh);
+        let i2c_pins = (pb10, pb11);
+        let i2c = BlockingI2c::i2c2(
+            device.I2C2,
+            i2c_pins,
+            Mode::Fast {
+                frequency: 400_000,
+                duty_cycle: DutyCycle::Ratio2to1,
+            },
+            clocks,
+            &mut rcc.apb1,
+            1000,
+            10,
+            1000,
+            1000,
+        );
+        let mut screen: GraphicsMode<_> = Builder::new()
+            .with_size(DisplaySize::Display128x32)
+            //.with_rotation(DisplayRotation::Rotate90)
+            .connect_i2c(i2c)
+            .into();
+        screen.init().unwrap();
+        screen.flush().unwrap();
+
         let c1 = gpiob.pb6.into_alternate_push_pull(&mut gpiob.crl);
         let c2 = gpiob.pb7.into_alternate_push_pull(&mut gpiob.crl);
         let c3 = gpiob.pb8.into_alternate_push_pull(&mut gpiob.crh);
@@ -151,6 +192,7 @@ const APP: () = {
             knob,
             knob2,
             led_strip,
+            screen,
         }
     }
 
@@ -162,12 +204,14 @@ const APP: () = {
             Some(CW) => {
                 //let _ = resources.led_strip.write(all_red.iter().cloned());
                 let _ = resources.led.set_high();
-                *resources.step += 1;
+                *resources.step += 0.25;
             }
             Some(CCW) => {
                 //let _ = resources.led_strip.write(all_blue.iter().cloned());
                 let _ = resources.led.set_low();
-                *resources.step -= 1;
+                *resources.step -= 0.25;
+                //cortex_m::asm::bkpt();
+                //hprintln!("step: {}, speed: {}", *resources.step, *resources.speed);
             }
             None => {}
         }
@@ -175,32 +219,70 @@ const APP: () = {
             Some(CW) => {
                 //let _ = resources.led_strip.write(all_red.iter().cloned());
                 let _ = resources.led.set_high();
-                *resources.speed += 0.01;
+                *resources.speed += 0.05;
             }
             Some(CCW) => {
                 //let _ = resources.led_strip.write(all_blue.iter().cloned());
                 let _ = resources.led.set_low();
-                *resources.speed -= 0.01;
+                *resources.speed -= 0.05;
             }
             None => {}
         }
     }
 
-    #[task(resources = [led_strip, hue, step, speed], schedule = [tick])]
+    #[task(resources = [led_strip, hue, step, speed, screen], schedule = [tick])]
     fn tick() {
+        let mut step_s: String<consts::U16> = String::new();
+        let mut speed_s: String<consts::U16> = String::new();
+        let mut hue_s: String<consts::U16> = String::new();
+        let _ = write!(step_s, "step: {}", *resources.step);
+        let _ = write!(speed_s, "speed: {}", *resources.speed * 100.0);
+        let _ = write!(hue_s, "hue: {}", *resources.hue);
+        let _ = resources.screen.clear();
+        resources.screen.draw(
+            Font6x8::render_str(step_s.as_str())
+                .with_stroke(Some(1u8.into()))
+                .into_iter(),
+        );
+        resources.screen.draw(
+            Font6x8::render_str(speed_s.as_str())
+                .with_stroke(Some(1u8.into()))
+                .translate(Coord::new(0, 8))
+                .into_iter(),
+        );
+        resources.screen.draw(
+            Font6x8::render_str(hue_s.as_str())
+                .with_stroke(Some(1u8.into()))
+                .translate(Coord::new(0, 16))
+                .into_iter(),
+        );
+        let _ = resources.screen.flush();
         schedule.tick(Instant::now() + PERIOD.cycles()).unwrap();
-        *resources.hue += *resources.speed;
-        *resources.hue %= 192.0;
-        let start = Hsv { hue: *resources.hue as u8, sat: 0xff, val: 0xff};
-        let inc = *resources.step;
+        let hue = (((*resources.hue + *resources.speed) % 192.0) + 192.0) % 192.0;
+        *resources.hue = hue;
+        let start = Hsv {
+            hue: hue as u8,
+            sat: 0x99,
+            val: 0x55,
+        };
+        let inc = *resources.step as u8;
         let colors = successors(Some(start), |c| {
             Some(Hsv {
                 hue: ((c.hue as u16 + inc as u16) % 192) as u8,
-                .. *c
+                ..*c
             })
-        }).map(hsv2rgb).take(8);
-        let _ = resources.led_strip.write(colors);
-}
+        })
+        .map(hsv2rgb)
+        .take(72);
+        let block: Vec<RGB8, consts::U72> = colors.collect();
+        let center = once(block[0]).cycle().take(2);
+        let petals = once(block[1]).chain(once(block[2])).cycle().take(12);
+        let rays = once(block[3]).chain(once(block[4])).cycle().take(12);
+        let outer = once(block[5]).chain(once(block[6])).cycle().take(12);
+        let full = center.chain(petals).chain(rays).chain(outer);
+        //let full_block: Vec<RGB8, consts::U38> = full.collect();
+        let _ = resources.led_strip.write(full);
+    }
 
     extern "C" {
         fn EXTI0();

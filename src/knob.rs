@@ -16,6 +16,7 @@ impl<A: InputPin, B: InputPin> Knob<A, B> {
         let last = (false, false);
         Self { a, b, last }
     }
+    #[inline(never)]
     pub fn poll(&mut self) -> Option<Direction> {
         let next: (bool, bool) = (
             self.a.is_high().unwrap_or(false),
