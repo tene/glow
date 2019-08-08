@@ -14,7 +14,7 @@ use core::{
     iter::{once, successors},
 };
 
-use embedded_hal::digital::v2::OutputPin;
+//use embedded_hal::digital::v2::OutputPin;
 use rtfm::{app, Instant};
 use stm32f1xx_hal::{
     afio::AfioExt,
@@ -35,20 +35,18 @@ use stm32f1xx_hal::{
 
 use apa102_spi::Apa102;
 #[allow(unused)]
-use smart_leds::{
-    hsv::{hsv2rgb, Hsv},
-    SmartLedsWrite, RGB8,
-};
+use smart_leds::{SmartLedsWrite, RGB8};
 
 use embedded_graphics::{fonts::Font6x8, prelude::*};
 use ssd1306::{interface::I2cInterface, prelude::*, Builder};
 
 use heapless::{consts, String, Vec};
 
+use glow::hsv::HSV;
 use glow::knob::{Direction, Knob};
 use glow::pwmled::PwmLed;
 
-const PERIOD: u32 = 80_000;
+const PERIOD: u32 = 800_000;
 
 #[app(device = stm32f1::stm32f103)]
 const APP: () = {
@@ -72,9 +70,9 @@ const APP: () = {
         >,
     > = ();
     static mut pwm_led: PwmLed = ();
-    static mut speed: f32 = -1.5;
-    static mut step: f32 = 16.0;
-    static mut hue: f32 = 0.0;
+    static mut speed: i16 = -10;
+    static mut step: i16 = 30;
+    static mut hsv: HSV = HSV::new(0, 0x00, 0x10);
 
     #[init(schedule = [tick])]
     fn init() -> init::LateResources {
@@ -195,19 +193,21 @@ const APP: () = {
     }
 
     //#[interrupt(resources = [led, button, knob, speed, led_strip])]
-    #[interrupt(resources = [led, knob, knob2, step, speed])]
+    #[interrupt(resources = [led, knob, knob2, step, speed, hsv])]
     fn EXTI15_10() {
         use Direction::*;
         match resources.knob2.poll() {
             Some(CW) => {
                 //let _ = resources.led_strip.write(all_red.iter().cloned());
-                let _ = resources.led.set_high();
-                *resources.step += 0.25;
+                //let _ = resources.led.set_high();
+                //*resources.step += 1;
+                resources.hsv.s += 8;
             }
             Some(CCW) => {
                 //let _ = resources.led_strip.write(all_blue.iter().cloned());
-                let _ = resources.led.set_low();
-                *resources.step -= 0.25;
+                //let _ = resources.led.set_low();
+                //*resources.step -= 1;
+                resources.hsv.s -= 8;
                 //cortex_m::asm::bkpt();
                 //hprintln!("step: {}, speed: {}", *resources.step, *resources.speed);
             }
@@ -216,26 +216,31 @@ const APP: () = {
         match resources.knob.poll() {
             Some(CW) => {
                 //let _ = resources.led_strip.write(all_red.iter().cloned());
-                let _ = resources.led.set_high();
-                *resources.speed += 0.05;
+                //let _ = resources.led.set_high();
+                //*resources.speed += 1;
+                resources.hsv.v += 8;
             }
             Some(CCW) => {
                 //let _ = resources.led_strip.write(all_blue.iter().cloned());
-                let _ = resources.led.set_low();
-                *resources.speed -= 0.05;
+                //let _ = resources.led.set_low();
+                //*resources.speed -= 1;
+                resources.hsv.v -= 8;
             }
             None => {}
         }
     }
 
-    #[task(resources = [led_strip, hue, step, speed, screen], schedule = [tick])]
+    #[task(resources = [led_strip, hsv, step, speed, screen], schedule = [tick])]
     fn tick() {
+        let mut hsv: HSV = *resources.hsv;
+        let speed = *resources.speed;
+        let step = *resources.step;
         let mut step_s: String<consts::U16> = String::new();
         let mut speed_s: String<consts::U16> = String::new();
         let mut hue_s: String<consts::U16> = String::new();
-        let _ = write!(step_s, "step: {}", *resources.step);
-        let _ = write!(speed_s, "speed: {}", *resources.speed * 100.0);
-        let _ = write!(hue_s, "hue: {}", *resources.hue);
+        let _ = write!(step_s, "step: {}", step);
+        let _ = write!(speed_s, "speed: {}", speed);
+        let _ = write!(hue_s, "{} {} {}", hsv.s, hsv.v, hsv.h);
         let _ = resources.screen.clear();
         resources.screen.draw(
             Font6x8::render_str(step_s.as_str())
@@ -256,23 +261,10 @@ const APP: () = {
         );
         let _ = resources.screen.flush();
         schedule.tick(Instant::now() + PERIOD.cycles()).unwrap();
-        let hue = (((*resources.hue + *resources.speed) % 192.0) + 192.0) % 192.0;
-        *resources.hue = hue;
-        let start = Hsv {
-            hue: hue as u8,
-            sat: 0xff,
-            val: 0xff,
-        };
-        let inc = *resources.step as u8;
-        let colors = successors(Some(start), |c| {
-            Some(Hsv {
-                hue: ((c.hue as u16 + inc as u16) % 192) as u8,
-                ..*c
-            })
-        })
-        .map(hsv2rgb)
-        .take(72);
-        let block: Vec<RGB8, consts::U72> = colors.collect();
+        hsv.shift_hue(speed);
+        *resources.hsv = hsv;
+        let colors = successors(Some(hsv), |c| Some(c.shifted_hue(step))).take(72);
+        let block: Vec<HSV, consts::U72> = colors.collect();
         let center = once(block[0]).cycle().take(2);
         let petals = once(block[1]).chain(once(block[3])).cycle().take(12);
         let rays = once(block[2]).chain(once(block[4])).cycle().take(12);
