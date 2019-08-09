@@ -72,7 +72,7 @@ const APP: () = {
     static mut pwm_led: PwmLed = ();
     static mut speed: i16 = -10;
     static mut step: i16 = 30;
-    static mut hsv: HSV = HSV::new(0, 0x00, 0x10);
+    static mut hsv: HSV = HSV::new(0, 0xff, 0x80);
 
     #[init(schedule = [tick])]
     fn init() -> init::LateResources {
