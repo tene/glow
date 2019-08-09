@@ -12,6 +12,8 @@ use cortex_m_semihosting::hprintln;
 use core::{
     fmt::Write,
     iter::{once, successors},
+    ops::Add,
+    ops::Mul,
 };
 
 //use embedded_hal::digital::v2::OutputPin;
@@ -42,8 +44,9 @@ use ssd1306::{interface::I2cInterface, prelude::*, Builder};
 
 use heapless::{consts, String, Vec};
 
-use glow::hsv::HSV;
+use glow::hsv::{HSV, HUE_MAX};
 use glow::knob::{Direction, Knob};
+use glow::m6::{generate, Node, Render};
 use glow::pwmled::PwmLed;
 
 const PERIOD: u32 = 800_000;
@@ -70,8 +73,9 @@ const APP: () = {
         >,
     > = ();
     static mut pwm_led: PwmLed = ();
-    static mut speed: i16 = -10;
+    static mut speed: i16 = -41;
     static mut step: i16 = 30;
+    static mut offset: i16 = 0;
     static mut hsv: HSV = HSV::new(0, 0xff, 0x80);
 
     #[init(schedule = [tick])]
@@ -230,7 +234,7 @@ const APP: () = {
         }
     }
 
-    #[task(resources = [led_strip, hsv, step, speed, screen], schedule = [tick])]
+    #[task(resources = [led_strip, hsv, step, speed, screen, offset], schedule = [tick])]
     fn tick() {
         let mut hsv: HSV = *resources.hsv;
         let speed = *resources.speed;
@@ -263,18 +267,40 @@ const APP: () = {
         schedule.tick(Instant::now() + PERIOD.cycles()).unwrap();
         hsv.shift_hue(speed);
         *resources.hsv = hsv;
-        let colors = successors(Some(hsv), |c| Some(c.shifted_hue(step))).take(72);
-        let block: Vec<HSV, consts::U72> = colors.collect();
-        let center = once(block[0]).cycle().take(2);
-        let petals = once(block[1]).chain(once(block[3])).cycle().take(12);
-        let rays = once(block[2]).chain(once(block[4])).cycle().take(12);
-        let outer = once(block[5]).chain(once(block[6])).cycle().take(12);
-        let full = center.chain(petals).chain(rays).chain(outer);
-        //let full_block: Vec<RGB8, consts::U38> = full.collect();
-        let _ = resources.led_strip.write(full);
+        *resources.offset += speed;
+        let rainbow = Rainbow::new(*resources.offset);
+        let full_block: Vec<HSV, consts::U38> = generate(&rainbow).collect();
+        let _ = resources.led_strip.write(full_block.iter());
     }
 
     extern "C" {
         fn EXTI0();
     }
 };
+
+struct Rainbow {
+    offset: i16,
+}
+
+impl Rainbow {
+    fn new(offset: i16) -> Self {
+        Self { offset }
+    }
+}
+
+impl Render for Rainbow {
+    fn render(&self, n: &Node) -> (HSV, HSV) {
+        use glow::m6::Region::*;
+        use num_rational::Ratio;
+        let ao: Ratio<i16> = match n.region {
+            Center => Ratio::new(0, 12),
+            Inner => Ratio::new(0, 12),
+            Ray => Ratio::new(0, 12),
+            Outer => Ratio::new(0, 12),
+        };
+        let hue = n.angle.add(ao).mul(HUE_MAX / 6).to_integer() as i16;
+
+        let a = HSV::new(self.offset + hue, 0x80, 0x80);
+        (a, a)
+    }
+}

@@ -25,7 +25,8 @@ pub struct HSV {
 }
 
 impl HSV {
-    pub const fn new(h: u16, s: u8, v: u8) -> Self {
+    pub const fn new(h: i16, s: u8, v: u8) -> Self {
+        let h: u16 = (((h % HUE_MAX) + HUE_MAX) % HUE_MAX) as u16;
         Self { h, s, v }
     }
     // From http://www.vagrearg.org/content/hsvrgb
@@ -93,6 +94,12 @@ impl HSV {
 }
 
 impl Into<RGB8> for HSV {
+    fn into(self) -> RGB8 {
+        self.to_rgb().into()
+    }
+}
+
+impl Into<RGB8> for &HSV {
     fn into(self) -> RGB8 {
         self.to_rgb().into()
     }
