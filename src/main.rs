@@ -9,12 +9,7 @@ extern crate panic_semihosting; // panic handler
 #[allow(unused)]
 use cortex_m_semihosting::hprintln;
 
-use core::{
-    fmt::Write,
-    iter::{once, successors},
-    ops::Add,
-    ops::Mul,
-};
+use core::{fmt::Write, ops::Add, ops::Mul};
 
 //use embedded_hal::digital::v2::OutputPin;
 use rtfm::{app, Instant};
@@ -24,11 +19,9 @@ use stm32f1xx_hal::{
     gpio::{
         gpioa::{PA5, PA6, PA7},
         gpiob::{PB10, PB11, PB12, PB13, PB14, PB15},
-        gpioc::PC13,
-        Alternate, Floating, GpioExt, Input, OpenDrain, Output, PullDown, PushPull,
+        Alternate, Floating, GpioExt, Input, OpenDrain, PullDown, PushPull,
     },
     i2c::{BlockingI2c, DutyCycle, Mode},
-    pwm::PwmExt,
     rcc::RccExt,
     spi::Spi,
     stm32::{I2C2, SPI1},
@@ -47,15 +40,11 @@ use heapless::{consts, String, Vec};
 use glow::hsv::{HSV, HUE_MAX};
 use glow::knob::{Direction, Knob};
 use glow::m6::{generate, Node, Render};
-use glow::pwmled::PwmLed;
 
 const PERIOD: u32 = 800_000;
 
 #[app(device = stm32f1::stm32f103)]
 const APP: () = {
-    static mut toggle: bool = false;
-    static mut led: PC13<Output<PushPull>> = ();
-    //static mut button: PB12<Input<PullDown>> = ();
     static mut knob: Knob<PB12<Input<PullDown>>, PB13<Input<PullDown>>> = ();
     static mut knob2: Knob<PB14<Input<PullDown>>, PB15<Input<PullDown>>> = ();
     static mut screen: GraphicsMode<
@@ -72,7 +61,6 @@ const APP: () = {
             ),
         >,
     > = ();
-    static mut pwm_led: PwmLed = ();
     static mut speed: i16 = -41;
     static mut step: i16 = 30;
     static mut offset: i16 = 0;
@@ -83,7 +71,6 @@ const APP: () = {
         let rcc = device.RCC;
         let afio = device.AFIO;
         let exti = device.EXTI;
-        let tim4 = device.TIM4;
 
         rcc.apb2enr
             .modify(|_r, w| w.afioen().enabled().spi1en().enabled());
@@ -118,9 +105,7 @@ const APP: () = {
         let mut afio = afio.constrain(&mut rcc.apb2);
         let mut gpioa = device.GPIOA.split(&mut rcc.apb2);
         let mut gpiob = device.GPIOB.split(&mut rcc.apb2);
-        let mut gpioc = device.GPIOC.split(&mut rcc.apb2);
 
-        let led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
         let k1a = gpiob.pb12.into_pull_down_input(&mut gpiob.crh);
         let k1b = gpiob.pb13.into_pull_down_input(&mut gpiob.crh);
         let k2a = gpiob.pb14.into_pull_down_input(&mut gpiob.crh);
@@ -169,26 +154,8 @@ const APP: () = {
         screen.init().unwrap();
         screen.flush().unwrap();
 
-        let c1 = gpiob.pb6.into_alternate_push_pull(&mut gpiob.crl);
-        let c2 = gpiob.pb7.into_alternate_push_pull(&mut gpiob.crl);
-        let c3 = gpiob.pb8.into_alternate_push_pull(&mut gpiob.crh);
-        let c4 = gpiob.pb9.into_alternate_push_pull(&mut gpiob.crh);
-
-        let (r, g, _, b) = tim4.pwm(
-            (c1, c2, c3, c4),
-            &mut afio.mapr,
-            1.khz(),
-            clocks,
-            &mut rcc.apb1,
-        );
-
-        let pwm_led = PwmLed::new(r, g, b);
-
         schedule.tick(Instant::now() + PERIOD.cycles()).unwrap();
         init::LateResources {
-            pwm_led,
-            led,
-            //button,
             knob,
             knob2,
             led_strip,
@@ -196,37 +163,26 @@ const APP: () = {
         }
     }
 
-    //#[interrupt(resources = [led, button, knob, speed, led_strip])]
-    #[interrupt(resources = [led, knob, knob2, step, speed, hsv])]
+    #[interrupt(resources = [knob, knob2, step, speed, hsv])]
     fn EXTI15_10() {
         use Direction::*;
         match resources.knob2.poll() {
             Some(CW) => {
-                //let _ = resources.led_strip.write(all_red.iter().cloned());
-                //let _ = resources.led.set_high();
                 //*resources.step += 1;
                 resources.hsv.s += 8;
             }
             Some(CCW) => {
-                //let _ = resources.led_strip.write(all_blue.iter().cloned());
-                //let _ = resources.led.set_low();
                 //*resources.step -= 1;
                 resources.hsv.s -= 8;
-                //cortex_m::asm::bkpt();
-                //hprintln!("step: {}, speed: {}", *resources.step, *resources.speed);
             }
             None => {}
         }
         match resources.knob.poll() {
             Some(CW) => {
-                //let _ = resources.led_strip.write(all_red.iter().cloned());
-                //let _ = resources.led.set_high();
                 //*resources.speed += 1;
                 resources.hsv.v += 8;
             }
             Some(CCW) => {
-                //let _ = resources.led_strip.write(all_blue.iter().cloned());
-                //let _ = resources.led.set_low();
                 //*resources.speed -= 1;
                 resources.hsv.v -= 8;
             }
