@@ -35,13 +35,14 @@ use smart_leds::{SmartLedsWrite, RGB8};
 use embedded_graphics::{fonts::Font6x8, prelude::*};
 use ssd1306::{interface::I2cInterface, prelude::*, Builder};
 
-use heapless::{consts, String, Vec};
+use heapless::{consts, String};
 
 use glow::hsv::{HSV, HUE_MAX};
 use glow::knob::{Direction, Knob};
-use glow::m6::{generate, Node, Render};
+use glow::m6::{Node, Render};
 
 const PERIOD: u32 = 800_000;
+const DEBUG_PERIOD: u32 = 8_000_000;
 
 #[app(device = stm32f1::stm32f103)]
 const APP: () = {
@@ -66,7 +67,7 @@ const APP: () = {
     static mut offset: i16 = 0;
     static mut hsv: HSV = HSV::new(0, 0xff, 0x80);
 
-    #[init(schedule = [tick])]
+    #[init(schedule = [tick, debug_tick])]
     fn init() -> init::LateResources {
         let rcc = device.RCC;
         let afio = device.AFIO;
@@ -155,6 +156,9 @@ const APP: () = {
         screen.flush().unwrap();
 
         schedule.tick(Instant::now() + PERIOD.cycles()).unwrap();
+        schedule
+            .debug_tick(Instant::now() + DEBUG_PERIOD.cycles())
+            .unwrap();
         init::LateResources {
             knob,
             knob2,
@@ -190,16 +194,22 @@ const APP: () = {
         }
     }
 
-    #[task(resources = [led_strip, hsv, step, speed, screen, offset], schedule = [tick])]
+    #[task(resources = [led_strip, speed, offset], schedule = [tick])]
     fn tick() {
-        let mut hsv: HSV = *resources.hsv;
-        let speed = *resources.speed;
-        let step = *resources.step;
+        schedule.tick(Instant::now() + PERIOD.cycles()).unwrap();
+        *resources.offset += *resources.speed;
+        let rainbow = Rainbow::new(*resources.offset);
+        let _ = resources.led_strip.write(rainbow.generate());
+    }
+
+    #[task(resources = [hsv, step, speed, screen, offset], schedule = [debug_tick])]
+    fn debug_tick() {
+        let hsv: HSV = *resources.hsv;
         let mut step_s: String<consts::U16> = String::new();
         let mut speed_s: String<consts::U16> = String::new();
         let mut hue_s: String<consts::U16> = String::new();
-        let _ = write!(step_s, "step: {}", step);
-        let _ = write!(speed_s, "speed: {}", speed);
+        let _ = write!(step_s, "step: {}", *resources.step);
+        let _ = write!(speed_s, "speed: {}", *resources.speed);
         let _ = write!(hue_s, "{} {} {}", hsv.s, hsv.v, hsv.h);
         let _ = resources.screen.clear();
         resources.screen.draw(
@@ -220,15 +230,10 @@ const APP: () = {
                 .into_iter(),
         );
         let _ = resources.screen.flush();
-        schedule.tick(Instant::now() + PERIOD.cycles()).unwrap();
-        hsv.shift_hue(speed);
-        *resources.hsv = hsv;
-        *resources.offset += speed;
-        let rainbow = Rainbow::new(*resources.offset);
-        let full_block: Vec<HSV, consts::U38> = generate(&rainbow).collect();
-        let _ = resources.led_strip.write(full_block.iter());
+        schedule
+            .debug_tick(Instant::now() + DEBUG_PERIOD.cycles())
+            .unwrap();
     }
-
     extern "C" {
         fn EXTI0();
     }
