@@ -1,6 +1,6 @@
 use core::{fmt::Write, ops::Add, ops::Mul};
 
-use heapless::{consts, String};
+use heapless::{consts, String, Vec};
 
 use crate::hsv::{HSV, HUE_MAX};
 use crate::knob::Direction;
@@ -16,31 +16,6 @@ impl Rainbow {
         let offset = 0;
         let speed = 10;
         Self { offset, speed }
-    }
-
-    pub fn debug(&self) -> String<consts::U16> {
-        let mut rv = String::new();
-        let _ = write!(rv, "{} {}", self.speed, self.offset);
-        rv
-    }
-
-    pub fn knob1(&mut self, dir: Direction) {
-        use Direction::*;
-        match dir {
-            CW => {
-                self.speed += 1;
-            }
-            CCW => {
-                self.speed -= 1;
-            }
-        }
-    }
-    pub fn knob2(&mut self, dir: Direction) {
-        use Direction::*;
-        match dir {
-            CW => {}
-            CCW => {}
-        }
     }
 }
 
@@ -61,5 +36,34 @@ impl Render for Rainbow {
     }
     fn tick(&mut self) {
         self.offset += self.speed;
+    }
+    fn debug(&self) -> Vec<String<consts::U16>, consts::U8> {
+        let mut rv = Vec::new();
+        let mut speed_s = String::new();
+        let mut offset_s = String::new();
+        let _ = write!(speed_s, "speed: {}", self.speed);
+        let _ = write!(offset_s, "offset: {}", self.offset);
+        let _ = rv.push(speed_s);
+        let _ = rv.push(offset_s);
+        rv
+    }
+
+    fn knob1(&mut self, dir: Direction) {
+        use Direction::*;
+        match dir {
+            CW => {
+                self.speed += 1;
+            }
+            CCW => {
+                self.speed -= 1;
+            }
+        }
+    }
+    fn knob2(&mut self, dir: Direction) {
+        use Direction::*;
+        match dir {
+            CW => {}
+            CCW => {}
+        }
     }
 }

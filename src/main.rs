@@ -34,8 +34,8 @@ use embedded_graphics::{fonts::Font6x8, prelude::*};
 use ssd1306::{interface::I2cInterface, prelude::*, Builder};
 
 use glow::knob::Knob;
-use glow::m6::Render;
-use glow::render::Rainbow;
+use glow::m6::{Generator, Render};
+use glow::render::{Breath, Rainbow};
 
 const PERIOD: u32 = 800_000;
 const DEBUG_PERIOD: u32 = 8_000_000;
@@ -59,6 +59,7 @@ const APP: () = {
         >,
     > = ();
     static mut rainbow: Rainbow = Rainbow::new();
+    static mut breath: Breath = Breath::new();
 
     #[init(schedule = [tick, debug_tick])]
     fn init() -> init::LateResources {
@@ -160,44 +161,57 @@ const APP: () = {
         }
     }
 
-    #[interrupt(resources = [knob, knob2, rainbow])]
+    #[interrupt(resources = [knob, knob2, rainbow, breath], priority=1)]
     fn EXTI15_10() {
-        match resources.knob2.poll() {
+        let k1 = &mut resources.knob;
+        let k2 = &mut resources.knob2;
+        resources.breath.lock(|r| {
+        match k1.poll() {
             Some(x) => {
-                resources.rainbow.knob2(x);
+                r.knob1(x);
             }
             None => {}
         }
-        match resources.knob.poll() {
+        match k2.poll() {
             Some(x) => {
-                resources.rainbow.knob1(x);
+                r.knob2(x);
             }
             None => {}
         }
+        });
     }
 
-    #[task(resources = [led_strip, rainbow], schedule = [tick])]
+    #[task(resources = [led_strip, rainbow, breath], schedule = [tick], priority = 2)]
     fn tick() {
         schedule.tick(Instant::now() + PERIOD.cycles()).unwrap();
-        let _ = resources.led_strip.write(resources.rainbow.generate());
-        resources.rainbow.tick();
+        //let r = resources.breath as &mut dyn Render;
+        let ls = resources.led_strip;
+        resources.breath.lock(|r| {
+        let g: Generator = Generator::new(r);
+        let _ = ls.write(g);
+        r.tick();
+        });
     }
 
-    #[task(resources = [rainbow, screen], schedule = [debug_tick])]
+    #[task(resources = [screen, rainbow, breath], schedule = [debug_tick])]
     fn debug_tick() {
         schedule
             .debug_tick(Instant::now() + DEBUG_PERIOD.cycles())
             .unwrap();
-        let rainbow_s = resources.rainbow.debug();
+        let dbgv = resources.breath.lock(|r| r.debug());
         let _ = resources.screen.clear();
+        for i in 0..(dbgv.len()) {
         resources.screen.draw(
-            Font6x8::render_str(rainbow_s.as_str())
+            Font6x8::render_str(dbgv[i].as_str())
                 .with_stroke(Some(1u8.into()))
+                .translate(Coord::new(0, 8*(i as i32)))
                 .into_iter(),
         );
+        }
         let _ = resources.screen.flush();
     }
     extern "C" {
         fn EXTI0();
+        fn USART1();
     }
 };

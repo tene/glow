@@ -1,8 +1,9 @@
-use heapless::{consts, Vec};
+use heapless::{consts, String, Vec};
 use lazy_static::lazy_static;
 use num_rational::Ratio;
 
 use crate::hsv::HSV;
+use crate::knob::Direction;
 
 use core::iter::once;
 
@@ -64,29 +65,33 @@ lazy_static! {
 }
 
 // TODO -> AsRef<RGB>
-pub trait Render: Sized {
+pub trait Render {
     fn render(&self, n: &Node) -> (HSV, HSV);
     fn tick(&mut self) {}
-    fn generate<'a>(&'a self) -> Generator<'a, Self> {
-        Generator::new(&self)
+    fn debug(&self) -> Vec<String<consts::U16>, consts::U8> {
+        let rv = Vec::new();
+        rv
     }
+
+    fn knob1(&mut self, _dir: Direction) {}
+    fn knob2(&mut self, _dir: Direction) {}
 }
 
-pub struct Generator<'a, T: Render> {
+pub struct Generator<'a> {
     idx: usize,
     carry: Option<HSV>,
-    r: &'a T,
+    r: &'a dyn Render,
 }
 
-impl<'a, T: Render> Generator<'a, T> {
-    fn new(r: &'a T) -> Self {
+impl<'a> Generator<'a> {
+    pub fn new(r: &'a dyn Render) -> Self {
         let idx = 0;
         let carry = None;
         Self { idx, carry, r }
     }
 }
 
-impl<'a, T: Render> Iterator for Generator<'a, T> {
+impl<'a> Iterator for Generator<'a> {
     type Item = HSV;
     fn next(&mut self) -> Option<HSV> {
         let carry = self.carry.take();
