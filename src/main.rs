@@ -9,8 +9,6 @@ extern crate panic_semihosting; // panic handler
 #[allow(unused)]
 use cortex_m_semihosting::hprintln;
 
-use core::{fmt::Write, ops::Add, ops::Mul};
-
 //use embedded_hal::digital::v2::OutputPin;
 use rtfm::{app, Instant};
 use stm32f1xx_hal::{
@@ -35,11 +33,9 @@ use smart_leds::{SmartLedsWrite, RGB8};
 use embedded_graphics::{fonts::Font6x8, prelude::*};
 use ssd1306::{interface::I2cInterface, prelude::*, Builder};
 
-use heapless::{consts, String};
-
-use glow::hsv::{HSV, HUE_MAX};
-use glow::knob::{Direction, Knob};
-use glow::m6::{Node, Render};
+use glow::knob::Knob;
+use glow::m6::Render;
+use glow::render::Rainbow;
 
 const PERIOD: u32 = 800_000;
 const DEBUG_PERIOD: u32 = 8_000_000;
@@ -62,10 +58,7 @@ const APP: () = {
             ),
         >,
     > = ();
-    static mut speed: i16 = -41;
-    static mut step: i16 = 30;
-    static mut offset: i16 = 0;
-    static mut hsv: HSV = HSV::new(0, 0xff, 0x80);
+    static mut rainbow: Rainbow = Rainbow::new();
 
     #[init(schedule = [tick, debug_tick])]
     fn init() -> init::LateResources {
@@ -167,101 +160,44 @@ const APP: () = {
         }
     }
 
-    #[interrupt(resources = [knob, knob2, step, speed, hsv])]
+    #[interrupt(resources = [knob, knob2, rainbow])]
     fn EXTI15_10() {
-        use Direction::*;
         match resources.knob2.poll() {
-            Some(CW) => {
-                //*resources.step += 1;
-                resources.hsv.s += 8;
-            }
-            Some(CCW) => {
-                //*resources.step -= 1;
-                resources.hsv.s -= 8;
+            Some(x) => {
+                resources.rainbow.knob2(x);
             }
             None => {}
         }
         match resources.knob.poll() {
-            Some(CW) => {
-                //*resources.speed += 1;
-                resources.hsv.v += 8;
-            }
-            Some(CCW) => {
-                //*resources.speed -= 1;
-                resources.hsv.v -= 8;
+            Some(x) => {
+                resources.rainbow.knob1(x);
             }
             None => {}
         }
     }
 
-    #[task(resources = [led_strip, speed, offset], schedule = [tick])]
+    #[task(resources = [led_strip, rainbow], schedule = [tick])]
     fn tick() {
         schedule.tick(Instant::now() + PERIOD.cycles()).unwrap();
-        *resources.offset += *resources.speed;
-        let rainbow = Rainbow::new(*resources.offset);
-        let _ = resources.led_strip.write(rainbow.generate());
+        let _ = resources.led_strip.write(resources.rainbow.generate());
+        resources.rainbow.tick();
     }
 
-    #[task(resources = [hsv, step, speed, screen, offset], schedule = [debug_tick])]
+    #[task(resources = [rainbow, screen], schedule = [debug_tick])]
     fn debug_tick() {
-        let hsv: HSV = *resources.hsv;
-        let mut step_s: String<consts::U16> = String::new();
-        let mut speed_s: String<consts::U16> = String::new();
-        let mut hue_s: String<consts::U16> = String::new();
-        let _ = write!(step_s, "step: {}", *resources.step);
-        let _ = write!(speed_s, "speed: {}", *resources.speed);
-        let _ = write!(hue_s, "{} {} {}", hsv.s, hsv.v, hsv.h);
-        let _ = resources.screen.clear();
-        resources.screen.draw(
-            Font6x8::render_str(step_s.as_str())
-                .with_stroke(Some(1u8.into()))
-                .into_iter(),
-        );
-        resources.screen.draw(
-            Font6x8::render_str(speed_s.as_str())
-                .with_stroke(Some(1u8.into()))
-                .translate(Coord::new(0, 8))
-                .into_iter(),
-        );
-        resources.screen.draw(
-            Font6x8::render_str(hue_s.as_str())
-                .with_stroke(Some(1u8.into()))
-                .translate(Coord::new(0, 16))
-                .into_iter(),
-        );
-        let _ = resources.screen.flush();
         schedule
             .debug_tick(Instant::now() + DEBUG_PERIOD.cycles())
             .unwrap();
+        let rainbow_s = resources.rainbow.debug();
+        let _ = resources.screen.clear();
+        resources.screen.draw(
+            Font6x8::render_str(rainbow_s.as_str())
+                .with_stroke(Some(1u8.into()))
+                .into_iter(),
+        );
+        let _ = resources.screen.flush();
     }
     extern "C" {
         fn EXTI0();
     }
 };
-
-struct Rainbow {
-    offset: i16,
-}
-
-impl Rainbow {
-    fn new(offset: i16) -> Self {
-        Self { offset }
-    }
-}
-
-impl Render for Rainbow {
-    fn render(&self, n: &Node) -> (HSV, HSV) {
-        use glow::m6::Region::*;
-        use num_rational::Ratio;
-        let ao: Ratio<i16> = match n.region {
-            Center => Ratio::new(0, 12),
-            Inner => Ratio::new(0, 12),
-            Ray => Ratio::new(0, 12),
-            Outer => Ratio::new(0, 12),
-        };
-        let hue = n.angle.add(ao).mul(HUE_MAX / 6).to_integer() as i16;
-
-        let a = HSV::new(self.offset + hue, 0x80, 0x80);
-        (a, a)
-    }
-}
