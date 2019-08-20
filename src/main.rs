@@ -35,7 +35,7 @@ use ssd1306::{interface::I2cInterface, prelude::*, Builder};
 
 use glow::knob::Knob;
 use glow::m6::{Generator, Render};
-use glow::render::{Breath, Rainbow};
+use glow::render::{Breath, Rainbow, Zoom};
 
 const PERIOD: u32 = 800_000;
 const DEBUG_PERIOD: u32 = 8_000_000;
@@ -60,6 +60,7 @@ const APP: () = {
     > = ();
     static mut rainbow: Rainbow = Rainbow::new();
     static mut breath: Breath = Breath::new();
+    static mut zoom: Zoom = Zoom::new();
 
     #[init(schedule = [tick, debug_tick])]
     fn init() -> init::LateResources {
@@ -161,44 +162,41 @@ const APP: () = {
         }
     }
 
-    #[interrupt(resources = [knob, knob2, rainbow, breath], priority=1)]
+    #[interrupt(resources = [knob, knob2, rainbow, breath, zoom], priority=1)]
     fn EXTI15_10() {
         let k1 = &mut resources.knob;
         let k2 = &mut resources.knob2;
-        resources.breath.lock(|r| {
-        match k1.poll() {
-            Some(x) => {
-                r.knob1(x);
+        resources.rainbow.lock(|r| {
+            match k1.poll() {
+                Some(x) => {
+                    r.knob1(x);
+                }
+                None => {}
             }
-            None => {}
-        }
-        match k2.poll() {
-            Some(x) => {
-                r.knob2(x);
+            match k2.poll() {
+                Some(x) => {
+                    r.knob2(x);
+                }
+                None => {}
             }
-            None => {}
-        }
         });
     }
 
-    #[task(resources = [led_strip, rainbow, breath], schedule = [tick], priority = 2)]
+    #[task(resources = [led_strip, rainbow, breath, zoom], schedule = [tick], priority = 3)]
     fn tick() {
-        schedule.tick(Instant::now() + PERIOD.cycles()).unwrap();
         //let r = resources.breath as &mut dyn Render;
         let ls = resources.led_strip;
-        resources.breath.lock(|r| {
-        let g: Generator = Generator::new(r);
-        let _ = ls.write(g);
-        r.tick();
+        resources.rainbow.lock(|r| {
+            let g: Generator = Generator::new(r);
+            let _ = ls.write(g);
+            r.tick();
         });
+        schedule.tick(scheduled + PERIOD.cycles()).unwrap();
     }
 
-    #[task(resources = [screen, rainbow, breath], schedule = [debug_tick])]
+    #[task(resources = [screen, rainbow, breath, zoom], schedule = [debug_tick], priority=2)]
     fn debug_tick() {
-        schedule
-            .debug_tick(Instant::now() + DEBUG_PERIOD.cycles())
-            .unwrap();
-        let dbgv = resources.breath.lock(|r| r.debug());
+        let dbgv = resources.rainbow.lock(|r| r.debug());
         let _ = resources.screen.clear();
         for i in 0..(dbgv.len()) {
         resources.screen.draw(
@@ -209,6 +207,9 @@ const APP: () = {
         );
         }
         let _ = resources.screen.flush();
+        schedule
+            .debug_tick(scheduled + DEBUG_PERIOD.cycles())
+            .unwrap();
     }
     extern "C" {
         fn EXTI0();

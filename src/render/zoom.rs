@@ -6,50 +6,52 @@ use crate::hsv::{HSV, HUE_MAX};
 use crate::knob::Direction;
 use crate::m6::{Node, Region, Render};
 
-pub struct Rainbow {
-    offset: i16,
+pub struct Zoom {
+    hue: i16,
     speed: i16,
-    saturation: u8,
+    step: i16,
 }
 
-impl Rainbow {
+impl Zoom {
     pub const fn new() -> Self {
-        let offset = 0;
-        let speed = 10;
-        let saturation = 0xff;
-        Self { offset, speed, saturation }
+        let hue = 0;
+        let speed = 20;
+        let step = -64;
+        Self { hue, speed, step }
     }
 }
 
-impl Render for Rainbow {
+impl Render for Zoom {
     fn render(&self, n: &Node) -> (HSV, HSV) {
         use num_rational::Ratio;
         use Region::*;
-        let ao: Ratio<i16> = match n.region {
-            Center => Ratio::new(0, 12),
-            Inner => Ratio::new(0, 12),
-            Ray => Ratio::new(0, 12),
-            Outer => Ratio::new(0, 12),
+        let (sa,sb): (i16,i16) = match n.region {
+            Center => (0,0),
+            Inner => (1,3),
+            Ray => (2,5),
+            Outer => (4,6),
         };
-        let hue = n.angle.add(ao).mul(2*HUE_MAX/3).to_integer() as i16;
 
-        let a = HSV::new(self.offset + hue, self.saturation, 0x80);
-        (a, a)
+        let a = HSV::new(self.hue + (sa * self.step), 0x60, 0x80);
+        let b = HSV::new(self.hue + (sb * self.step), 0x60, 0x80);
+        (a, b)
     }
     fn tick(&mut self) {
-        self.offset += self.speed;
+        let h = self.hue + self.speed;
+        let h = ((h % HUE_MAX) + HUE_MAX) % HUE_MAX;
+        self.hue = h;
     }
     fn debug(&self) -> Vec<String<consts::U16>, consts::U8> {
         let mut rv = Vec::new();
         let mut speed_s = String::new();
-        let mut offset_s = String::new();
-        let mut sat_s = String::new();
+        let mut hue_s = String::new();
+        let mut step_s = String::new();
         let _ = write!(speed_s, "speed: {}", self.speed);
-        let _ = write!(offset_s, "offset: {}", self.offset);
-        let _ = write!(sat_s, "saturation: {}", self.saturation);
+        let _ = write!(hue_s, "hue: {}", self.hue);
+        let _ = write!(step_s, "step: {}", self.step);
         let _ = rv.push(speed_s);
-        let _ = rv.push(offset_s);
-        let _ = rv.push(sat_s);
+        let _ = rv.push(hue_s);
+        let _ = rv.push(step_s);
         rv
     }
 
@@ -68,10 +70,10 @@ impl Render for Rainbow {
         use Direction::*;
         match dir {
             CW => {
-                self.saturation += 1;
+                self.step += 1;
             }
             CCW => {
-                self.saturation -= 1;
+                self.step -= 1;
             }
         }
     }

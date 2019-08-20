@@ -47,5 +47,6 @@ features = ["spin_no_std"]
 [profile.release]
 codegen-units = 1
 debug = true
+opt-level = "z"
 # GDB segfaults when loading this
 #lto = true

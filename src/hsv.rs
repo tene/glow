@@ -64,9 +64,10 @@ impl HSV {
         *pb = (ww >> 8) as u8;
         let h_frac: u32 = (h as u32) & 0xff;
         let mut d: u32 = match sextant & 1 {
+            // slope up
+            0 => v as u32 * ((255 << 8) - (s as u32 * (256 - h_frac))),
             // slope down
-            0 => v as u32 * ((255 << 8) - (s as u32 * h_frac)),
-            1 => v as u32 * ((255 << 8) - (s as u32 * (256 - h_frac))),
+            1 => v as u32 * ((255 << 8) - (s as u32 * h_frac)),
             _ => unreachable!(),
         };
         d += d >> 8;
