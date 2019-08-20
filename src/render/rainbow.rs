@@ -17,7 +17,11 @@ impl Rainbow {
         let offset = 0;
         let speed = 10;
         let saturation = 0xff;
-        Self { offset, speed, saturation }
+        Self {
+            offset,
+            speed,
+            saturation,
+        }
     }
 }
 
@@ -31,7 +35,7 @@ impl Render for Rainbow {
             Ray => Ratio::new(0, 12),
             Outer => Ratio::new(0, 12),
         };
-        let hue = n.angle.add(ao).mul(2*HUE_MAX/3).to_integer() as i16;
+        let hue = n.angle.add(ao).mul(HUE_MAX).to_integer() as i16;
 
         let a = HSV::new(self.offset + hue, self.saturation, 0x80);
         (a, a)

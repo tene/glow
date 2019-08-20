@@ -199,12 +199,12 @@ const APP: () = {
         let dbgv = resources.rainbow.lock(|r| r.debug());
         let _ = resources.screen.clear();
         for i in 0..(dbgv.len()) {
-        resources.screen.draw(
-            Font6x8::render_str(dbgv[i].as_str())
-                .with_stroke(Some(1u8.into()))
-                .translate(Coord::new(0, 8*(i as i32)))
-                .into_iter(),
-        );
+            resources.screen.draw(
+                Font6x8::render_str(dbgv[i].as_str())
+                    .with_stroke(Some(1u8.into()))
+                    .translate(Coord::new(0, 8 * (i as i32)))
+                    .into_iter(),
+            );
         }
         let _ = resources.screen.flush();
         schedule

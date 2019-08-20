@@ -1,9 +1,9 @@
-use core::{fmt::Write};
+use core::fmt::Write;
 
 use heapless::{consts, String, Vec};
 use libm::F32Ext;
 
-use crate::hsv::{HSV, HUE_MAX};
+use crate::hsv::HSV;
 use crate::knob::Direction;
 use crate::m6::{Node, Region, Render};
 
@@ -20,7 +20,12 @@ impl Breath {
         let phase = 0.0;
         let speed = 0.1;
         let scale = 128.0;
-        Self { hue, phase, speed, scale }
+        Self {
+            hue,
+            phase,
+            speed,
+            scale,
+        }
     }
 }
 
@@ -33,18 +38,26 @@ fn breathe(x: f32) -> f32 {
 impl Render for Breath {
     fn render(&self, n: &Node) -> (HSV, HSV) {
         use Region::*;
-        let (vma,vmb): (f32,f32) = match n.region {
-            Center => (1.0,1.0),
-            Inner => (0.8,0.4),
-            Ray => (0.6,0.2),
-            Outer => (0.0,-0.2),
+        let (vma, vmb): (f32, f32) = match n.region {
+            Center => (1.0, 1.0),
+            Inner => (0.8, 0.4),
+            Ray => (0.6, 0.2),
+            Outer => (0.0, -0.2),
         };
 
         let b = breathe(self.phase);
         let size = 64.0;
 
-        let a = HSV::new(self.hue + (self.scale * (1.0 - vma) * b) as i16, 0xa0, 128 + (size * vma * b) as u8);
-        let b = HSV::new(self.hue + (self.scale * (1.0 - vmb) * b) as i16, 0xa0, 128 + (size * vmb * b) as u8);
+        let a = HSV::new(
+            self.hue + (self.scale * (1.0 - vma) * b) as i16,
+            0xa0,
+            128 + (size * vma * b) as u8,
+        );
+        let b = HSV::new(
+            self.hue + (self.scale * (1.0 - vmb) * b) as i16,
+            0xa0,
+            128 + (size * vmb * b) as u8,
+        );
         (a, b)
     }
     fn tick(&mut self) {

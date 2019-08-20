@@ -1,4 +1,4 @@
-use core::{fmt::Write, ops::Add, ops::Mul};
+use core::fmt::Write;
 
 use heapless::{consts, String, Vec};
 
@@ -23,13 +23,12 @@ impl Zoom {
 
 impl Render for Zoom {
     fn render(&self, n: &Node) -> (HSV, HSV) {
-        use num_rational::Ratio;
         use Region::*;
-        let (sa,sb): (i16,i16) = match n.region {
-            Center => (0,0),
-            Inner => (1,3),
-            Ray => (2,5),
-            Outer => (4,6),
+        let (sa, sb): (i16, i16) = match n.region {
+            Center => (0, 0),
+            Inner => (1, 3),
+            Ray => (2, 5),
+            Outer => (4, 6),
         };
 
         let a = HSV::new(self.hue + (sa * self.step), 0x60, 0x80);
