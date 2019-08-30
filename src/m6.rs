@@ -46,13 +46,13 @@ fn build_nodes() -> Vec<Node, consts::U19> {
         angle: Ratio::new(n * 2, 12),
         idx: n,
     });
-    let asdf: [i16; 6] = [5, 0, 1, 2, 3, 4];
+    let asdf: [i16; 6] = [1, 2, 3, 4, 5, 0];
     let rays = asdf.iter().map(|n| Node {
         region: Ray,
-        angle: Ratio::new((n * 2) + 1, 12),
+        angle: Ratio::new((n * 2) - 1, 12),
         idx: *n,
     });
-    let outer = asdf.iter().map(|n| Node {
+    let outer = asdf.iter().rev().map(|n| Node {
         region: Outer,
         angle: Ratio::new(n * 2, 12),
         idx: *n,

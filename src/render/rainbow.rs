@@ -29,16 +29,16 @@ impl Render for Rainbow {
     fn render(&self, n: &Node) -> (HSV, HSV) {
         use num_rational::Ratio;
         use Region::*;
-        let ao: Ratio<i16> = match n.region {
-            Center => Ratio::new(0, 12),
-            Inner => Ratio::new(0, 12),
-            Ray => Ratio::new(0, 12),
-            Outer => Ratio::new(0, 12),
+        let (ao, bo): (Ratio<i16>, Ratio<i16>) = match n.region {
+            Ray => (Ratio::new(1, 24), Ratio::new(3, 24)),
+            _ => (Ratio::new(0, 12), Ratio::new(0, 12)),
         };
-        let hue = n.angle.add(ao).mul(HUE_MAX).to_integer() as i16;
+        let hue_a = n.angle.add(ao).mul(HUE_MAX).to_integer() as i16;
+        let hue_b = n.angle.add(bo).mul(HUE_MAX).to_integer() as i16;
 
-        let a = HSV::new(self.offset + hue, self.saturation, 0x80);
-        (a, a)
+        let a = HSV::new(self.offset + hue_a, self.saturation, 0x80);
+        let b = HSV::new(self.offset + hue_b, self.saturation, 0x80);
+        (a, b)
     }
     fn tick(&mut self) {
         self.offset += self.speed;
